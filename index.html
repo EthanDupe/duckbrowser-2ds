@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exo — 2DS XL FBI QR Installer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, #223344 0%, #112233 45%, #000000 100%);
+      color: #ffffff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      padding: 24px;
+    }
+    .card {
+      max-width: 460px;
+      width: 100%;
+      background: rgba(0, 0, 0, 0.72);
+      border: 2px solid #ffffff;
+      padding: 28px 24px;
+      text-align: center;
+    }
+    h1 {
+      font-size: 42px;
+      letter-spacing: 6px;
+      margin-bottom: 6px;
+    }
+    .sub {
+      color: #00ff88;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+    .qr-pad {
+      background: #ffffff;
+      padding: 16px;
+      display: inline-block;
+      border: 3px solid #00ff88;
+      margin-bottom: 16px;
+    }
+    .qr-pad img {
+      display: block;
+      width: 252px;
+      height: 252px;
+      image-rendering: pixelated;
+    }
+    .steps {
+      text-align: left;
+      font-size: 13px;
+      line-height: 1.6;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      padding: 12px 14px;
+      margin-bottom: 18px;
+    }
+    .btns {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    a.btn, button.btn {
+      background: rgba(0, 0, 0, 0.8);
+      color: #ffffff;
+      border: 2px solid #ffffff;
+      padding: 10px 14px;
+      text-decoration: none;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    a.btn:hover, button.btn:hover {
+      background: #ffffff;
+      color: #000000;
+    }
+    .url-box {
+      font-size: 11px;
+      color: #aaccff;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>e X o</h1>
+    <div class="sub">NINTENDO 2DS XL — FBI QR INSTALLER</div>
+    <div class="qr-pad">
+      <img id="qr-img" src="qr.png" alt="FBI CIA QR Code">
+    </div>
+    <div class="steps">
+      1. Open <b>FBI</b> on your 2DS XL<br>
+      2. Select <b>Remote Install &rarr; Scan QR Code</b><br>
+      3. Point your 2DS XL camera at this QR code and press <b>A</b> to install!
+    </div>
+    <div class="btns">
+      <a class="btn" href="exo.cia" download>Download exo.cia</a>
+      <a class="btn" href="exo.3dsx" download>Download exo.3dsx</a>
+      <button class="btn" type="button" onclick="toggleQr()">Switch QR Mirror</button>
+    </div>
+    <div id="qr-url" class="url-box">https://ethandupe.github.io/duckbrowser-2ds/exo.cia</div>
+  </div>
+  <script>
+    var useRelease = false;
+    var pagesUrl = "https://ethandupe.github.io/duckbrowser-2ds/exo.cia";
+    var releaseUrl = "https://github.com/EthanDupe/duckbrowser-2ds/releases/download/latest/exo.cia";
+    function toggleQr() {
+      useRelease = !useRelease;
+      document.getElementById("qr-img").src = useRelease ? "qr_release.png" : "qr.png";
+      document.getElementById("qr-url").textContent = useRelease ? releaseUrl : pagesUrl;
+    }
+  </script>
+</body>
+</html>
