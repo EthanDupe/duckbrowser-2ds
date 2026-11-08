@@ -1,0 +1,117 @@
+name: Build 2DS XL Browser CIA & Publish FBI QR Code to GitHub Pages
+
+on:
+  push:
+    branches: ["main", "master"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build_and_qr:
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkitarm:latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install makerom, bannertool, 3ds-curl & QR generator
+        run: |
+          apt-get update && apt-get install -y wget unzip python3 python3-pip python3-pil
+          pip3 install --break-system-packages qrcode || apt-get install -y python3-qrcode
+          dkp-pacman -Sy --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib || true
+          wget -q https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.3/makerom-v0.18.3-ubuntu_x86_64.zip -O /tmp/makerom.zip
+          unzip -o /tmp/makerom.zip -d /opt/devkitpro/tools/bin/
+          chmod +x /opt/devkitpro/tools/bin/makerom
+          wget -q https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip -O /tmp/bannertool.zip
+          unzip -o -j /tmp/bannertool.zip linux-x86_64/bannertool -d /opt/devkitpro/tools/bin/
+          chmod +x /opt/devkitpro/tools/bin/bannertool
+
+      - name: Compile duckbrowser.cia and Generate FBI QR Code Page
+        run: |
+          if [ -d "duckbrowser_2ds" ] && [ ! -f "Makefile" ]; then
+            cd duckbrowser_2ds
+          fi
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+          export CTRULIB=/opt/devkitpro/libctru
+          export PORTLIBS=/opt/devkitpro/portlibs/3ds
+          export PATH="/opt/devkitpro/tools/bin:/opt/devkitpro/devkitARM/bin:$PATH"
+          make cia
+
+          mkdir -p "$GITHUB_WORKSPACE/_site"
+          cp duckbrowser.cia duckbrowser.3dsx duckbrowser.smdh "$GITHUB_WORKSPACE/_site/"
+
+          OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          REPO_NAME="${GITHUB_REPOSITORY#*/}"
+          CIA_URL="https://${OWNER_LC}.github.io/${REPO_NAME}/duckbrowser.cia"
+
+          python3 - "$CIA_URL" "$GITHUB_WORKSPACE/_site" << 'PYEOF'
+          import sys, os, qrcode
+          cia_url, site_dir = sys.argv[1], sys.argv[2]
+          img = qrcode.make(cia_url)
+          img.save(os.path.join(site_dir, "qr.png"))
+          html = f'''<!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8"/>
+            <meta name="viewport" content="width=device-width,initial-scale=1"/>
+            <title>DuckVid Browser 2DS XL — FBI QR Code Installer</title>
+            <style>
+              body {{ background:#0e1420; color:#f0f6fc; font-family:system-ui,-apple-system,sans-serif; text-align:center; padding:32px 16px; }}
+              .card {{ max-width:480px; margin:0 auto; background:#162032; border:1px solid #2a3b58; border-radius:16px; padding:28px; box-shadow:0 12px 32px rgba(0,0,0,0.45); }}
+              h1 {{ margin:0 0 8px; color:#ff7b47; font-size:24px; }}
+              p {{ color:#a8c0dc; line-height:1.5; font-size:15px; }}
+              .qr-box {{ background:#fff; padding:16px; border-radius:12px; display:inline-block; margin:16px 0; }}
+              .qr-box img {{ width:240px; height:240px; image-rendering:pixelated; display:block; }}
+              .btn {{ display:inline-block; margin-top:12px; padding:10px 20px; background:#de5833; color:#fff; text-decoration:none; border-radius:8px; font-weight:600; }}
+              code {{ background:#0b101a; padding:4px 8px; border-radius:6px; color:#7ee787; font-size:13px; word-break:break-all; }}
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <h1>DuckVid Browser 2DS XL</h1>
+              <p>DuckDuckGo Search + Bookmarks + Video Player for New Nintendo 2DS XL</p>
+              <div class="qr-box"><img src="qr.png" alt="FBI QR Code"/></div>
+              <p><strong>To install on your 2DS XL:</strong><br/>Open <strong>FBI</strong> &rarr; <strong>Remote Install</strong> &rarr; <strong>Scan QR Code</strong></p>
+              <p>Direct CIA URL:<br/><code>{cia_url}</code></p>
+              <a class="btn" href="duckbrowser.cia">Download duckbrowser.cia</a>
+            </div>
+          </body>
+          </html>'''
+          with open(os.path.join(site_dir, "index.html"), "w") as f:
+              f.write(html)
+          PYEOF
+
+      - name: Upload CIA & QR Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: duckbrowser-2ds-xl-cia-and-qr
+          path: |
+            _site/duckbrowser.cia
+            _site/duckbrowser.3dsx
+            _site/qr.png
+            _site/index.html
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy_pages:
+    needs: build_and_qr
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
