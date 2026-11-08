@@ -1,11 +1,12 @@
-name: Build 2DS XL CIA & Deploy QR Website
+name: Build 2DS XL Browser CIA & Publish FBI QR Code to GitHub Pages
 
 on:
   push:
+    branches: ["main", "master"]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -14,240 +15,103 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build_and_qr:
+    runs-on: ubuntu-24.04
     container: devkitpro/devkitarm:latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install makerom, bannertool & qrencode
+      - name: Install makerom, bannertool, 3ds-curl & QR generator
         run: |
-          apt-get update && apt-get install -y wget unzip qrencode
+          apt-get update && apt-get install -y wget unzip python3 python3-pip python3-pil
+          pip3 install --break-system-packages qrcode || apt-get install -y python3-qrcode
+          dkp-pacman -Sy --noconfirm 3ds-curl 3ds-mbedtls 3ds-zlib || true
+          wget -q https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.3/makerom-v0.18.3-ubuntu_x86_64.zip -O /tmp/makerom.zip
+          unzip -o /tmp/makerom.zip -d /opt/devkitpro/tools/bin/
+          chmod +x /opt/devkitpro/tools/bin/makerom
+          wget -q https://github.com/Epicpkmn11/bannertool/releases/download/v1.2.2/bannertool.zip -O /tmp/bannertool.zip
+          unzip -o -j /tmp/bannertool.zip linux-x86_64/bannertool -d /opt/devkitpro/tools/bin/
+          chmod +x /opt/devkitpro/tools/bin/bannertool
 
-          mkdir -p tools/bin
-
-          wget -q https://github.com/3DSGuy/Project_CTR/releases/download/makerom-v0.18.4/makerom-v0.18.4-ubuntu_x86_64.zip -O /tmp/makerom.zip
-          unzip -o /tmp/makerom.zip -d tools/bin/
-          chmod +x tools/bin/makerom
-
-          wget -q https://github.com/diasurgical/bannertool/releases/download/1.2.0/bannertool.zip -O /tmp/bannertool.zip
-          unzip -o -j /tmp/bannertool.zip linux-x86_64/bannertool -d tools/bin/
-          chmod +x tools/bin/bannertool
-
-      - name: Compile exo.3dsx and exo.cia
+      - name: Compile duckbrowser.cia and Generate FBI QR Code Page
         run: |
-          export PATH="$PWD/tools/bin:/opt/devkitpro/devkitARM/bin:$PATH"
+          if [ -d "duckbrowser_2ds" ] && [ ! -f "Makefile" ]; then
+            cd duckbrowser_2ds
+          fi
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITARM=/opt/devkitpro/devkitARM
+          export CTRULIB=/opt/devkitpro/libctru
+          export PORTLIBS=/opt/devkitpro/portlibs/3ds
+          export PATH="/opt/devkitpro/tools/bin:/opt/devkitpro/devkitARM/bin:$PATH"
           make cia
 
-      - name: Build QR Code Download Website (_site)
-        run: |
+          mkdir -p "$GITHUB_WORKSPACE/_site"
+          cp duckbrowser.cia duckbrowser.3dsx duckbrowser.smdh "$GITHUB_WORKSPACE/_site/"
+
           OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
           REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          PAGES_CIA_URL="https://${OWNER_LC}.github.io/${REPO_NAME}/exo.cia"
-          RELEASE_CIA_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/exo.cia"
+          CIA_URL="https://${OWNER_LC}.github.io/${REPO_NAME}/duckbrowser.cia"
 
-          mkdir -p _site
-          cp exo.cia exo.3dsx exo.smdh _site/
-          touch _site/.nojekyll
-
-          # Generate high-contrast QR codes with quiet zones for the 2DS XL camera
-          qrencode -s 9 -m 4 -l M -o _site/qr.png "$PAGES_CIA_URL"
-          qrencode -s 9 -m 4 -l M -o _site/qr_release.png "$RELEASE_CIA_URL"
-
-          cat <<EOF > _site/index.html
-          <!DOCTYPE html>
+          python3 - "$CIA_URL" "$GITHUB_WORKSPACE/_site" << 'PYEOF'
+          import sys, os, qrcode
+          cia_url, site_dir = sys.argv[1], sys.argv[2]
+          img = qrcode.make(cia_url)
+          img.save(os.path.join(site_dir, "qr.png"))
+          html = f'''<!DOCTYPE html>
           <html lang="en">
           <head>
-            <meta charset="utf-8">
-            <meta name="viewport" content="width=device-width, initial-scale=1">
-            <title>Exo — 2DS XL FBI QR Installer</title>
+            <meta charset="utf-8"/>
+            <meta name="viewport" content="width=device-width,initial-scale=1"/>
+            <title>DuckVid Browser 2DS XL — FBI QR Code Installer</title>
             <style>
-              * { box-sizing: border-box; margin: 0; padding: 0; }
-              body {
-                min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: radial-gradient(circle at center, #223344 0%, #112233 45%, #000000 100%);
-                color: #ffffff;
-                font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-                padding: 24px;
-              }
-              .card {
-                max-width: 460px;
-                width: 100%;
-                background: rgba(0, 0, 0, 0.72);
-                border: 2px solid #ffffff;
-                padding: 28px 24px;
-                text-align: center;
-              }
-              h1 {
-                font-size: 42px;
-                letter-spacing: 6px;
-                margin-bottom: 6px;
-              }
-              .sub {
-                color: #00ff88;
-                font-size: 13px;
-                margin-bottom: 20px;
-              }
-              .qr-pad {
-                background: #ffffff;
-                padding: 16px;
-                display: inline-block;
-                border: 3px solid #00ff88;
-                margin-bottom: 16px;
-              }
-              .qr-pad img {
-                display: block;
-                width: 252px;
-                height: 252px;
-                image-rendering: pixelated;
-              }
-              .steps {
-                text-align: left;
-                font-size: 13px;
-                line-height: 1.6;
-                background: rgba(255, 255, 255, 0.06);
-                border: 1px solid rgba(255, 255, 255, 0.35);
-                padding: 12px 14px;
-                margin-bottom: 18px;
-              }
-              .btns {
-                display: flex;
-                gap: 10px;
-                justify-content: center;
-                flex-wrap: wrap;
-                margin-bottom: 12px;
-              }
-              a.btn, button.btn {
-                background: rgba(0, 0, 0, 0.8);
-                color: #ffffff;
-                border: 2px solid #ffffff;
-                padding: 10px 14px;
-                text-decoration: none;
-                font-family: inherit;
-                font-size: 13px;
-                font-weight: 700;
-                cursor: pointer;
-              }
-              a.btn:hover, button.btn:hover {
-                background: #ffffff;
-                color: #000000;
-              }
-              .url-box {
-                font-size: 11px;
-                color: #aaccff;
-                word-break: break-all;
-              }
+              body {{ background:#0e1420; color:#f0f6fc; font-family:system-ui,-apple-system,sans-serif; text-align:center; padding:32px 16px; }}
+              .card {{ max-width:480px; margin:0 auto; background:#162032; border:1px solid #2a3b58; border-radius:16px; padding:28px; box-shadow:0 12px 32px rgba(0,0,0,0.45); }}
+              h1 {{ margin:0 0 8px; color:#ff7b47; font-size:24px; }}
+              p {{ color:#a8c0dc; line-height:1.5; font-size:15px; }}
+              .qr-box {{ background:#fff; padding:16px; border-radius:12px; display:inline-block; margin:16px 0; }}
+              .qr-box img {{ width:240px; height:240px; image-rendering:pixelated; display:block; }}
+              .btn {{ display:inline-block; margin-top:12px; padding:10px 20px; background:#de5833; color:#fff; text-decoration:none; border-radius:8px; font-weight:600; }}
+              code {{ background:#0b101a; padding:4px 8px; border-radius:6px; color:#7ee787; font-size:13px; word-break:break-all; }}
             </style>
           </head>
           <body>
             <div class="card">
-              <h1>e X o</h1>
-              <div class="sub">NINTENDO 2DS XL — FBI QR INSTALLER</div>
-              <div class="qr-pad">
-                <img id="qr-img" src="qr.png" alt="FBI CIA QR Code">
-              </div>
-              <div class="steps">
-                1. Open <b>FBI</b> on your 2DS XL<br>
-                2. Select <b>Remote Install &rarr; Scan QR Code</b><br>
-                3. Point your 2DS XL camera at this QR code and press <b>A</b> to install!
-              </div>
-              <div class="btns">
-                <a class="btn" href="exo.cia" download>Download exo.cia</a>
-                <a class="btn" href="exo.3dsx" download>Download exo.3dsx</a>
-                <button class="btn" type="button" onclick="toggleQr()">Switch QR Mirror</button>
-              </div>
-              <div id="qr-url" class="url-box">$PAGES_CIA_URL</div>
+              <h1>DuckVid Browser 2DS XL</h1>
+              <p>DuckDuckGo Search + Bookmarks + Video Player for New Nintendo 2DS XL</p>
+              <div class="qr-box"><img src="qr.png" alt="FBI QR Code"/></div>
+              <p><strong>To install on your 2DS XL:</strong><br/>Open <strong>FBI</strong> &rarr; <strong>Remote Install</strong> &rarr; <strong>Scan QR Code</strong></p>
+              <p>Direct CIA URL:<br/><code>{cia_url}</code></p>
+              <a class="btn" href="duckbrowser.cia">Download duckbrowser.cia</a>
             </div>
-            <script>
-              var useRelease = false;
-              var pagesUrl = "$PAGES_CIA_URL";
-              var releaseUrl = "$RELEASE_CIA_URL";
-              function toggleQr() {
-                useRelease = !useRelease;
-                document.getElementById("qr-img").src = useRelease ? "qr_release.png" : "qr.png";
-                document.getElementById("qr-url").textContent = useRelease ? releaseUrl : pagesUrl;
-              }
-            </script>
           </body>
-          </html>
-          EOF
+          </html>'''
+          with open(os.path.join(site_dir, "index.html"), "w") as f:
+              f.write(html)
+          PYEOF
 
-      - name: Upload exo.cia, exo.3dsx & QR Website Artifacts
+      - name: Upload CIA & QR Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: exo-2ds-xl-cia
+          name: duckbrowser-2ds-xl-cia-and-qr
           path: |
-            exo.cia
-            exo.3dsx
-            exo.smdh
+            _site/duckbrowser.cia
+            _site/duckbrowser.3dsx
             _site/qr.png
-            _site/qr_release.png
             _site/index.html
-            tools/remote_install_cia.py
 
       - name: Upload GitHub Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
+  deploy_pages:
+    needs: build_and_qr
+    runs-on: ubuntu-24.04
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Download Built CIA & Website Files
-        uses: actions/download-artifact@v4
-        with:
-          name: exo-2ds-xl-cia
-          path: dist
-
-      - name: Publish Latest Release for Direct FBI QR Download
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create latest dist/exo.cia dist/exo.3dsx dist/_site/qr_release.png             --title "Exo 2DS XL Latest Build"             --notes "Scan \`qr_release.png\` in **FBI -> Remote Install -> Scan QR Code** on your 2DS XL to install \`exo.cia\`."             --clobber || true
-
-      - name: Push Website to gh-pages Branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout --orphan gh-pages-temp
-          git rm -rf .
-          cp dist/exo.cia dist/exo.3dsx dist/exo.smdh .
-          cp dist/_site/index.html dist/_site/qr.png dist/_site/qr_release.png .
-          touch .nojekyll
-          git add .
-          git commit -m "Deploy Exo 2DS XL QR installer site"
-          git push origin HEAD:refs/heads/gh-pages --force
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-        continue-on-error: true
-        with:
-          enablement: true
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-        continue-on-error: true
-
-      - name: Write QR Website Link to Job Summary
-        run: |
-          OWNER_LC=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
-          REPO_NAME="${GITHUB_REPOSITORY#*/}"
-          SITE_URL="https://${OWNER_LC}.github.io/${REPO_NAME}/"
-          echo "### Exo — 2DS XL QR Code Website Deployed!" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Scan QR Website**: [$SITE_URL]($SITE_URL)" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Direct CIA (GitHub Pages)**: \`${SITE_URL}exo.cia\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **Direct CIA (GitHub Release)**: \`https://github.com/${GITHUB_REPOSITORY}/releases/download/latest/exo.cia\`" >> "$GITHUB_STEP_SUMMARY"
