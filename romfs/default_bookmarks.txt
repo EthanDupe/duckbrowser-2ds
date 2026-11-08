@@ -1,0 +1,6 @@
+DuckDuckGo Home|https://lite.duckduckgo.com/lite/
+3DS Homebrew Wiki|https://www.3dbrew.org/wiki/Main_Page
+Universal-DB 3DS|https://db.universal-team.net/3ds/
+Wikipedia Lite|https://en.m.wikipedia.org/wiki/New_Nintendo_2DS_XL
+GBAtemp 3DS Forum|https://gbatemp.net/forums/nintendo-3ds.199/
+Sample Space Video|video://builtin/space_demo
